@@ -72,12 +72,13 @@
         @media print {
             @page {
                 size: portrait;
-                margin: 0.5cm;
+                margin: 0.25in; /* Smaller margins to maximize space */
             }
             body {
                 background-color: white !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                overflow: hidden; /* Prevent scrollbars in print */
             }
             
             /* Ensure text is black for legibility */
@@ -90,17 +91,41 @@
                 display: none !important;
             }
             
-            /* Adjust layout for full width */
+            /* Main Container Scaling */
+            /* This scales down the content to ensure it fits on one page */
             .max-w-7xl {
                 max-width: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
+                transform: scale(0.9); /* Scale down to 90% */
+                transform-origin: top center;
+                width: 111%; /* Compensate width for scale (100 / 0.9) */
             }
+
+            /* Header Adjustments */
             header {
-                border-bottom: none !important;
-                margin-bottom: 1rem !important;
-                padding-bottom: 0 !important;
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                border-bottom: 2px solid #cbd5e1 !important;
+                margin-bottom: 1.5rem !important;
+                padding-bottom: 1rem !important;
             }
+            header h1 {
+                font-size: 2rem !important;
+                margin: 0 !important;
+            }
+            /* Make employee name visible and prominent in header */
+            #header-employee-name {
+                display: block !important;
+                font-size: 1.5rem !important;
+                font-weight: bold !important;
+                text-align: right !important;
+                margin: 0 !important;
+            }
+            
+            /* Layout Grid Adjustments */
             .grid {
                 display: block !important;
             }
@@ -108,28 +133,57 @@
                 width: 100% !important;
                 padding: 0 !important;
             }
+            .gap-8 { gap: 1rem !important; }
+            .gap-6 { gap: 1rem !important; }
+            .gap-4 { gap: 1rem !important; }
             
-            /* Ensure charts and cards don't break awkwardly */
-            .chart-wrapper {
-                height: 250px !important; /* Smaller charts for print */
-                page-break-inside: avoid;
-            }
+            /* Card Styling for Print */
             .bg-white, .bg-gradient-to-br {
                 box-shadow: none !important;
-                border: 1px solid #e2e8f0 !important; /* visible border for print */
+                border: 1px solid #e2e8f0 !important;
                 page-break-inside: avoid;
                 margin-bottom: 1rem !important;
+                padding: 1rem !important;
             }
             
-            /* Simplify layout for single page fit */
-            /* We use a specific selector strategy to force side-by-side in print */
-            .grid-cols-1.md\:grid-cols-3, .grid-cols-1.md\:grid-cols-2 {
+            /* Specific Flex Layouts for KPI and Charts */
+            .grid-cols-1.md\:grid-cols-3 {
                 display: flex !important;
                 gap: 1rem !important;
             }
-            .grid-cols-1.md\:grid-cols-3 > div, .grid-cols-1.md\:grid-cols-2 > div {
+            .grid-cols-1.md\:grid-cols-3 > div {
                 flex: 1;
-                min-width: 0; /* Prevent flex overflow */
+            }
+
+            .grid-cols-1.md\:grid-cols-2 {
+                display: flex !important;
+                gap: 1rem !important;
+            }
+            .grid-cols-1.md\:grid-cols-2 > div {
+                flex: 1;
+                /* Ensure chart cards don't collapse */
+                min-width: 0;
+            }
+            
+            /* Chart Specifics */
+            .chart-wrapper {
+                height: 180px !important; /* Fixed shorter height for print */
+                min-height: 180px !important;
+                margin-bottom: 1.5rem !important; /* Force space below chart */
+                page-break-inside: avoid;
+            }
+            
+            /* Ensure Chart Text is Pushed Down */
+            .chart-wrapper + p {
+                margin-top: 0.5rem !important;
+                display: block !important;
+                position: relative;
+            }
+
+            /* Table Compactness */
+            table th, table td {
+                padding: 0.5rem !important;
+                font-size: 0.9rem !important;
             }
         }
     </style>
@@ -140,14 +194,18 @@
         
         <!-- Header Section -->
         <header class="mb-8 border-b border-slate-200 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
+            <div class="flex-1">
                 <h1 class="text-3xl md:text-4xl font-bold text-slate-900 mb-2">Pay Stub</h1>
-                <h2 id="header-employee-name" class="text-xl font-semibold text-slate-700 mt-1 min-h-[1.75rem]"></h2>
                 <p class="description text-slate-500 text-lg max-w-3xl mt-2">
                     An interactive analysis of compensation, tax liabilities, and net income distribution. 
                 </p>
             </div>
-            <button onclick="window.print()" class="no-print bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow-sm transition flex items-center gap-2">
+            <!-- Employee Name Display (Prominent for Print) -->
+            <div class="flex-1 text-right">
+                 <h2 id="header-employee-name" class="text-xl font-semibold text-slate-700 mt-1 min-h-[1.75rem]"></h2>
+            </div>
+            
+            <button onclick="window.print()" class="no-print bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow-sm transition flex items-center gap-2 ml-4">
                 <!-- Icon: Printer -->
                 <span class="text-xl">🖨️</span>
                 Print Pay Stub
@@ -465,7 +523,7 @@
 
         function updateText() {
             if (state.name.trim()) {
-                const nameText = `Employee: ${state.name}`;
+                const nameText = `${state.name}`;
                 outputs.employee.textContent = `Net Pay for ${state.name}`;
                 outputs.headerName.textContent = nameText;
                 document.title = `Pay Stub - ${state.name}`; // Update page title for printer filename
