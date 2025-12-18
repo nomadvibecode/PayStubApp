@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pay Stub Calculator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Chosen Palette: Warm Neutrals & Professional Blues -->
+    <!-- 
+         Palette:
+         Background: Slate-50 (#f8fafc) - Warm neutral
+         Cards: White (#ffffff)
+         Primary Text: Slate-800 (#1e293b)
+         Accents: Blue-600 (Primary Action), Emerald-500 (Positive), Red-400 (Negative/Deduction)
+         Charts: Aligned with accent colors for consistency.
+    -->
+
+    <!-- Application Structure Plan: 
+         The app is designed as an interactive dashboard. 
+         1. Control Panel (Sidebar/Top): Allows users to manipulate input variables (Rates, Hours, Taxes). 
+            Reason: Immediate feedback loop. Changing an input instantly reflects in the report.
+         2. Executive Summary (Top Cards): High-level metrics (Net Pay, Effective Tax Rate).
+            Reason: Users need the "Bottom Line" first.
+         3. Visualization Layer (Middle): Two charts (Distribution & Breakdown).
+            Reason: Visualizing the "slice" taken by taxes is more impactful than numbers alone.
+         4. Detailed Analysis (Bottom): A breakdown of specific line items (SS, Medicare).
+            Reason: Provides the "Why" behind the numbers.
+    -->
+
+    <!-- Visualization & Content Choices:
+         1. Net Pay vs Taxes (Doughnut Chart):
+            Goal: Inform/Compare. 
+            Interaction: Hover for exact amounts.
+            Justification: A doughnut chart effectively shows the part-to-whole relationship of Gross Pay.
+         2. Tax Component Breakdown (Bar Chart):
+            Goal: Compare.
+            Interaction: Hover to see specific deduction amounts.
+            Justification: Allows comparison between Federal, State, and FICA burdens.
+         3. Dynamic Text Blocks:
+            Goal: Inform.
+            Interaction: Updates text based on calculation (e.g., "Your effective tax rate is...").
+            Justification: Turns raw data into a narrative.
+         
+         CONFIRMATION: NO SVG graphics used (using Unicode/CSS). NO Mermaid JS used.
+    -->
+
+    <style>
+        /* Custom Chart Container Styling per Requirements */
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            height: 300px; /* Base height */
+            max-height: 400px;
+        }
+
+        @media (min-width: 768px) {
+            .chart-wrapper {
+                height: 350px;
+            }
+        }
+        
+        /* Smooth transitions for values */
+        .value-transition {
+            transition: all 0.3s ease-out;
+        }
+
+        /* Print Specific Styles */
+        @media print {
+            @page {
+                size: portrait;
+                margin: 0.5cm;
+            }
+            body {
+                background-color: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            
+            /* Ensure text is black for legibility */
+            * {
+                color: black !important;
+            }
+
+            /* Hide non-essential elements for printing */
+            aside, .no-print, header button, header p {
+                display: none !important;
+            }
+            
+            /* Adjust layout for full width */
+            .max-w-7xl {
+                max-width: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            header {
+                border-bottom: none !important;
+                margin-bottom: 1rem !important;
+                padding-bottom: 0 !important;
+            }
+            .grid {
+                display: block !important;
+            }
+            main {
+                width: 100% !important;
+                padding: 0 !important;
+            }
+            
+            /* Ensure charts and cards don't break awkwardly */
+            .chart-wrapper {
+                height: 250px !important; /* Smaller charts for print */
+                page-break-inside: avoid;
+            }
+            .bg-white, .bg-gradient-to-br {
+                box-shadow: none !important;
+                border: 1px solid #e2e8f0 !important; /* visible border for print */
+                page-break-inside: avoid;
+                margin-bottom: 1rem !important;
+            }
+            
+            /* Simplify layout for single page fit */
+            /* We use a specific selector strategy to force side-by-side in print */
+            .grid-cols-1.md\:grid-cols-3, .grid-cols-1.md\:grid-cols-2 {
+                display: flex !important;
+                gap: 1rem !important;
+            }
+            .grid-cols-1.md\:grid-cols-3 > div, .grid-cols-1.md\:grid-cols-2 > div {
+                flex: 1;
+                min-width: 0; /* Prevent flex overflow */
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen">
+
+    <div class="max-w-7xl mx-auto p-4 md:p-8">
+        
+        <!-- Header Section -->
+        <header class="mb-8 border-b border-slate-200 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold text-slate-900 mb-2">Pay Stub</h1>
+                <p class="text-slate-500 text-lg max-w-3xl">
+                    An interactive analysis of compensation, tax liabilities, and net income distribution. 
+                </p>
+            </div>
+            <button onclick="window.print()" class="no-print bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow-sm transition flex items-center gap-2">
+                <!-- Icon: Printer -->
+                <span class="text-xl">🖨️</span>
+                Print Pay Stub
+            </button>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left Column: Control Panel -->
+            <aside class="lg:col-span-4 space-y-6">
+                
+                <!-- Intro to Controls -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-xl font-semibold mb-2 flex items-center gap-2">
+                        <span>⚙️</span> Configuration
+                    </h2>
+                    <p class="text-sm text-slate-500 mb-6">
+                        Modify these inputs to simulate different pay periods or tax situations. The dashboard updates in real-time.
+                    </p>
+
+                    <!-- Input Group: Employee -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Employee Name</label>
+                        <input type="text" id="input-name" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" placeholder="e.g. Alex Johnson">
+                    </div>
+
+                    <!-- Input Group: Earnings -->
+                    <div class="space-y-4 mb-6">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Earnings</h3>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Hourly Rate ($)</label>
+                            <input type="number" id="input-rate" value="40.00" step="0.50" min="0" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Hours Worked</label>
+                            <input type="number" id="input-hours" value="80" step="0.5" min="0" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono">
+                        </div>
+                    </div>
+
+                    <!-- Input Group: Tax Assumptions -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Tax Assumptions</h3>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Federal Withholding (%)</label>
+                            <div class="relative">
+                                <input type="number" id="input-fed" value="15.0" step="0.1" min="0" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono pr-8">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">State Withholding (%)</label>
+                            <div class="relative">
+                                <input type="number" id="input-state" value="4.25" step="0.01" min="0" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono pr-8">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info Block -->
+                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <h4 class="font-semibold text-blue-800 mb-1">Did you know?</h4>
+                    <p class="text-sm text-blue-600">
+                        FICA taxes (Social Security & Medicare) are fixed by law at 6.2% and 1.45% respectively for most employees.
+                    </p>
+                </div>
+
+            </aside>
+
+            <!-- Right Column: Visualization & Analysis -->
+            <main class="lg:col-span-8 space-y-6">
+
+                <!-- Section Intro -->
+                <div class="mb-2 no-print">
+                    <h2 class="text-2xl font-bold text-slate-800">Financial Overview</h2>
+                    <p class="text-slate-500">Real-time analysis of the current pay period.</p>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Gross Pay -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-medium uppercase">Gross Pay</p>
+                        <h3 id="kpi-gross" class="text-2xl font-bold text-slate-900 mt-1 value-transition">$0.00</h3>
+                        <p class="text-xs text-slate-400 mt-2">Before deductions</p>
+                    </div>
+                    <!-- Total Tax -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-medium uppercase">Total Deductions</p>
+                        <h3 id="kpi-deductions" class="text-2xl font-bold text-red-500 mt-1 value-transition">$0.00</h3>
+                        <p id="kpi-tax-rate" class="text-xs text-red-400 mt-2">0% Effective Rate</p>
+                    </div>
+                    <!-- Net Pay -->
+                    <div class="bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-xl shadow-lg text-white">
+                        <p class="text-sm text-blue-100 font-medium uppercase">Net Pay</p>
+                        <h3 id="kpi-net" class="text-3xl font-bold mt-1 value-transition">$0.00</h3>
+                        <p id="kpi-employee" class="text-xs text-blue-200 mt-2">Estimated Take Home</p>
+                    </div>
+                </div>
+
+                <!-- Charts Section -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Chart 1: Distribution -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="font-semibold text-slate-800 mb-4">Pay Distribution</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="distributionChart"></canvas>
+                        </div>
+                        <p class="text-xs text-slate-400 text-center mt-4">
+                            Visualizes the portion of Gross Pay that becomes Net Pay vs. Taxes.
+                        </p>
+                    </div>
+
+                    <!-- Chart 2: Tax Breakdown -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="font-semibold text-slate-800 mb-4">Deduction Breakdown</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="breakdownChart"></canvas>
+                        </div>
+                         <p class="text-xs text-slate-400 text-center mt-4">
+                            Compares the impact of Federal, State, and FICA withholdings.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Detailed Table Section -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-6 border-b border-slate-100">
+                        <h3 class="font-semibold text-slate-800">Detailed Statement</h3>
+                        <p class="text-sm text-slate-500">Line-item view of all calculated deductions.</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                                    <th class="p-4 font-medium">Category</th>
+                                    <th class="p-4 font-medium">Rate / Notes</th>
+                                    <th class="p-4 font-medium text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm text-slate-700 divide-y divide-slate-100">
+                                <tr class="hover:bg-slate-50 transition">
+                                    <td class="p-4 font-medium">Gross Pay</td>
+                                    <td id="table-hours-rate" class="p-4 text-slate-500">0 hrs @ $0.00/hr</td>
+                                    <td id="table-gross" class="p-4 text-right font-bold">$0.00</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 transition group">
+                                    <td class="p-4 pl-8 border-l-4 border-red-400">Federal Tax</td>
+                                    <td id="table-fed-rate" class="p-4 text-slate-500">0%</td>
+                                    <td id="table-fed-amt" class="p-4 text-right text-red-600 font-mono">-$0.00</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 transition group">
+                                    <td class="p-4 pl-8 border-l-4 border-red-300">State Tax</td>
+                                    <td id="table-state-rate" class="p-4 text-slate-500">0%</td>
+                                    <td id="table-state-amt" class="p-4 text-right text-red-600 font-mono">-$0.00</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 transition group">
+                                    <td class="p-4 pl-8 border-l-4 border-purple-400">Social Security</td>
+                                    <td class="p-4 text-slate-500">6.2% (Fixed FICA)</td>
+                                    <td id="table-ss-amt" class="p-4 text-right text-red-600 font-mono">-$0.00</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 transition group">
+                                    <td class="p-4 pl-8 border-l-4 border-purple-300">Medicare</td>
+                                    <td class="p-4 text-slate-500">1.45% (Fixed FICA)</td>
+                                    <td id="table-med-amt" class="p-4 text-right text-red-600 font-mono">-$0.00</td>
+                                </tr>
+                                <tr class="bg-blue-50/50">
+                                    <td class="p-4 font-bold text-blue-900">Net Pay</td>
+                                    <td class="p-4"></td>
+                                    <td id="table-net" class="p-4 text-right font-bold text-blue-700 text-lg">$0.00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            name: '',
+            hourlyRate: 40.00,
+            hoursWorked: 80,
+            fedRate: 15.0,
+            stateRate: 4.25
+        };
+
+        const CONSTANTS = {
+            SS_RATE: 0.062,
+            MED_RATE: 0.0145
+        };
+
+        // --- DOM Elements ---
+        const inputs = {
+            name: document.getElementById('input-name'),
+            rate: document.getElementById('input-rate'),
+            hours: document.getElementById('input-hours'),
+            fed: document.getElementById('input-fed'),
+            state: document.getElementById('input-state'),
+        };
+
+        const outputs = {
+            gross: document.getElementById('kpi-gross'),
+            deductions: document.getElementById('kpi-deductions'),
+            taxRate: document.getElementById('kpi-tax-rate'),
+            net: document.getElementById('kpi-net'),
+            employee: document.getElementById('kpi-employee'),
+            
+            // Table
+            tHoursRate: document.getElementById('table-hours-rate'),
+            tGross: document.getElementById('table-gross'),
+            tFedRate: document.getElementById('table-fed-rate'),
+            tFedAmt: document.getElementById('table-fed-amt'),
+            tStateRate: document.getElementById('table-state-rate'),
+            tStateAmt: document.getElementById('table-state-amt'),
+            tSSAmt: document.getElementById('table-ss-amt'),
+            tMedAmt: document.getElementById('table-med-amt'),
+            tNet: document.getElementById('table-net'),
+        };
+
+        // --- Chart Instances ---
+        let distChart, breakChart;
+
+        // --- Initialization ---
+        function init() {
+            setupEventListeners();
+            setupCharts();
+            updateCalculations();
+        }
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            inputs.name.addEventListener('input', (e) => {
+                state.name = e.target.value;
+                updateText();
+            });
+
+            inputs.rate.addEventListener('input', (e) => {
+                state.hourlyRate = parseFloat(e.target.value) || 0;
+                updateCalculations();
+            });
+
+            inputs.hours.addEventListener('input', (e) => {
+                state.hoursWorked = parseFloat(e.target.value) || 0;
+                updateCalculations();
+            });
+
+            inputs.fed.addEventListener('input', (e) => {
+                state.fedRate = parseFloat(e.target.value) || 0;
+                updateCalculations();
+            });
+
+            inputs.state.addEventListener('input', (e) => {
+                state.stateRate = parseFloat(e.target.value) || 0;
+                updateCalculations();
+            });
+        }
+
+        // --- Calculations ---
+        function updateCalculations() {
+            // Helper for currency rounding (standard 2 decimal places)
+            const round = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
+
+            const gross = round(state.hourlyRate * state.hoursWorked);
+            
+            const fedTax = round(gross * (state.fedRate / 100));
+            const stateTax = round(gross * (state.stateRate / 100));
+            const ssTax = round(gross * CONSTANTS.SS_RATE);
+            const medTax = round(gross * CONSTANTS.MED_RATE);
+            
+            const totalDeductions = round(fedTax + stateTax + ssTax + medTax);
+            const netPay = round(gross - totalDeductions);
+            const effectiveRate = gross > 0 ? (totalDeductions / gross) * 100 : 0;
+
+            const data = {
+                gross, fedTax, stateTax, ssTax, medTax, totalDeductions, netPay, effectiveRate
+            };
+
+            updateUI(data);
+            updateCharts(data);
+        }
+
+        // --- Formatting Helper ---
+        const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+        // --- UI Updates ---
+        function updateUI(data) {
+            outputs.gross.textContent = fmt.format(data.gross);
+            outputs.deductions.textContent = '-' + fmt.format(data.totalDeductions);
+            outputs.taxRate.textContent = data.effectiveRate.toFixed(1) + '% Effective Rate';
+            outputs.net.textContent = fmt.format(data.netPay);
+            
+            updateText();
+
+            // Table Updates
+            outputs.tHoursRate.textContent = `${state.hoursWorked} hrs @ $${state.hourlyRate.toFixed(2)}/hr`;
+            outputs.tGross.textContent = fmt.format(data.gross);
+            
+            outputs.tFedRate.textContent = state.fedRate.toFixed(1) + '%';
+            outputs.tFedAmt.textContent = '-' + fmt.format(data.fedTax);
+            
+            outputs.tStateRate.textContent = state.stateRate.toFixed(2) + '%';
+            outputs.tStateAmt.textContent = '-' + fmt.format(data.stateTax);
+            
+            outputs.tSSAmt.textContent = '-' + fmt.format(data.ssTax);
+            outputs.tMedAmt.textContent = '-' + fmt.format(data.medTax);
+            
+            outputs.tNet.textContent = fmt.format(data.netPay);
+        }
+
+        function updateText() {
+            if (state.name.trim()) {
+                outputs.employee.textContent = `Net Pay for ${state.name}`;
+            } else {
+                outputs.employee.textContent = 'Estimated Take Home';
+            }
+        }
+
+        // --- Charts ---
+        function setupCharts() {
+            // Common Options - Updated for Print Compatibility
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false, // CRITICAL FOR PRINTING: Prevents blank charts
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 20, usePointStyle: true, color: '#333' }
+                    }
+                }
+            };
+
+            // 1. Distribution Chart (Doughnut)
+            const ctxDist = document.getElementById('distributionChart').getContext('2d');
+            distChart = new Chart(ctxDist, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Net Pay', 'Taxes & Deductions'],
+                    datasets: [{
+                        data: [0, 0], // Initial data
+                        backgroundColor: ['#2563eb', '#ef4444'], // Blue-600, Red-500
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    cutout: '70%',
+                    plugins: {
+                        ...commonOptions.plugins,
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ' ' + context.label + ': ' + fmt.format(context.raw);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 2. Breakdown Chart (Bar)
+            const ctxBreak = document.getElementById('breakdownChart').getContext('2d');
+            breakChart = new Chart(ctxBreak, {
+                type: 'bar',
+                data: {
+                    labels: ['Federal', 'State', 'FICA (SS+Med)'],
+                    datasets: [{
+                        label: 'Deduction Amount',
+                        data: [0, 0, 0],
+                        backgroundColor: ['#f87171', '#fb923c', '#c084fc'], // Red-400, Orange-400, Purple-400
+                        borderRadius: 6,
+                        barThickness: 40
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#f1f5f9' }, // Slate-100
+                            ticks: { callback: (val) => '$' + val, color: '#666' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#666' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ' -' + fmt.format(context.raw);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts(data) {
+            // Update Distribution
+            distChart.data.datasets[0].data = [data.netPay, data.totalDeductions];
+            distChart.update();
+
+            // Update Breakdown
+            breakChart.data.datasets[0].data = [data.fedTax, data.stateTax, (data.ssTax + data.medTax)];
+            breakChart.update();
+        }
+
+        // Start
+        window.addEventListener('DOMContentLoaded', init);
+
+    </script>
+</body>
+</html>
