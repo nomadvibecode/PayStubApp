@@ -86,7 +86,7 @@
             }
 
             /* Hide non-essential elements for printing */
-            aside, .no-print, header button, header p {
+            aside, .no-print, header button, header p.description {
                 display: none !important;
             }
             
@@ -142,7 +142,8 @@
         <header class="mb-8 border-b border-slate-200 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <h1 class="text-3xl md:text-4xl font-bold text-slate-900 mb-2">Pay Stub</h1>
-                <p class="text-slate-500 text-lg max-w-3xl">
+                <h2 id="header-employee-name" class="text-xl font-semibold text-slate-700 mt-1 min-h-[1.75rem]"></h2>
+                <p class="description text-slate-500 text-lg max-w-3xl mt-2">
                     An interactive analysis of compensation, tax liabilities, and net income distribution. 
                 </p>
             </div>
@@ -353,6 +354,7 @@
         };
 
         const outputs = {
+            headerName: document.getElementById('header-employee-name'),
             gross: document.getElementById('kpi-gross'),
             deductions: document.getElementById('kpi-deductions'),
             taxRate: document.getElementById('kpi-tax-rate'),
@@ -463,9 +465,13 @@
 
         function updateText() {
             if (state.name.trim()) {
+                const nameText = `Employee: ${state.name}`;
                 outputs.employee.textContent = `Net Pay for ${state.name}`;
+                outputs.headerName.textContent = nameText;
+                document.title = `Pay Stub - ${state.name}`; // Update page title for printer filename
             } else {
                 outputs.employee.textContent = 'Estimated Take Home';
+                outputs.headerName.textContent = '';
             }
         }
 
